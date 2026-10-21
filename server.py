@@ -41,7 +41,7 @@ COMFYUI_INITIAL_DELAY = 2  # Initial delay in seconds
 COMFYUI_MAX_DELAY = 16  # Maximum delay in seconds
 
 # Publish configuration (optional env var for COMFYUI_OUTPUT_ROOT only)
-COMFYUI_OUTPUT_ROOT = os.getenv("COMFYUI_OUTPUT_ROOT")
+COMFYUI_OUTPUT_ROOT = os.getenv("COMFYUI_OUTPUT_ROOT", "/home/tieubaoca/AI/ComfyUI/output")
 
 
 def print_startup_banner():
@@ -183,10 +183,14 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 # Initialize FastMCP with lifespan and port configuration
 # Using port 9000 for consistency with previous version
 # Enable stateless_http to avoid requiring session management
+MCP_HOST = os.getenv("COMFY_MCP_HOST", "0.0.0.0")
+MCP_PORT = int(os.getenv("COMFY_MCP_PORT", "9000"))
+
 mcp = FastMCP(
     "ComfyUI_MCP_Server",
     lifespan=app_lifespan,
-    port=9000,
+    host=MCP_HOST,
+    port=MCP_PORT,
     stateless_http=True
 )
 

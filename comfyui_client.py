@@ -1,5 +1,6 @@
 import requests
 import json
+import os
 import time
 import logging
 from typing import Any, Dict, Optional, Sequence
@@ -13,49 +14,135 @@ logger = logging.getLogger("ComfyUIClient")
 class ComfyUIClient:
     def __init__(self, base_url):
         self.base_url = base_url
+        self.categorized_models = {}
         self.available_models = self._get_available_models()
     
     def refresh_models(self):
         """Re-fetch available models and update available_models list."""
         self.available_models = self._get_available_models()
 
-    def _get_available_models(self):
-        """Fetch list of available checkpoint models from ComfyUI"""
-        try:
-            response = requests.get(f"{self.base_url}/object_info/CheckpointLoaderSimple", timeout=10)
-            if response.status_code != 200:
-                logger.warning("Failed to fetch model list; using default handling")
-                return []
-            data = response.json()
-            # Safe dictionary access with proper error handling
-            try:
-                checkpoint_info = data.get("CheckpointLoaderSimple", {})
-                if not isinstance(checkpoint_info, dict):
-                    logger.warning("Unexpected CheckpointLoaderSimple structure")
-                    return []
-                input_info = checkpoint_info.get("input", {})
-                if not isinstance(input_info, dict):
-                    logger.warning("Unexpected input structure")
-                    return []
-                required_info = input_info.get("required", {})
-                if not isinstance(required_info, dict):
-                    logger.warning("Unexpected required structure")
-                    return []
-                ckpt_name_info = required_info.get("ckpt_name", [])
-                if not isinstance(ckpt_name_info, list) or len(ckpt_name_info) == 0:
-                    logger.warning("No checkpoint models found in API response")
-                    return []
-                models = ckpt_name_info[0] if isinstance(ckpt_name_info[0], list) else ckpt_name_info
-                logger.info(f"Available models: {models}")
-                return models
-            except (KeyError, IndexError, TypeError) as e:
-                logger.warning(f"Unexpected API response structure: {e}")
-                return []
-        except requests.RequestException as e:
-            logger.warning(f"Error fetching models: {e}")
-            return []
+    def get_categorized_models(self) -> Dict[str, list]:
+        """Fetch models categorized by their type (diffusion/unet, text_encoders, vae, etc.)"""
+        categories = {
+            "checkpoints": [],
+            "diffusion_models": [],
+            "text_encoders": [],
+            "vae": [],
+            "upscale_models": [],
+            "loras": [],
+            "controlnet": []
+        }
 
-    def run_custom_workflow(self, workflow: Dict[str, Any], preferred_output_keys: Sequence[str] | None = None, max_attempts: int = 30):
+        # 1. Try ComfyUI /models endpoint
+        try:
+            res = requests.get(f"{self.base_url}/models", timeout=5)
+            if res.status_code == 200:
+                folders = res.json()
+                mapping = {
+                    "checkpoints": "checkpoints",
+                    "diffusion_models": "diffusion_models",
+                    "unet_gguf": "diffusion_models",
+                    "text_encoders": "text_encoders",
+                    "clip_gguf": "text_encoders",
+                    "clip": "text_encoders",
+                    "vae": "vae",
+                    "upscale_models": "upscale_models",
+                    "loras": "loras",
+                    "controlnet": "controlnet"
+                }
+                for folder_name, cat in mapping.items():
+                    if folder_name in folders:
+                        try:
+                            r = requests.get(f"{self.base_url}/models/{folder_name}", timeout=3)
+                            if r.status_code == 200:
+                                files = [
+                                    x for x in r.json()
+                                    if isinstance(x, str) and not x.endswith((".lock", ".metadata", ".gitignore", ".log"))
+                                ]
+                                categories[cat].extend(files)
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.warning(f"Error querying /models: {e}")
+
+        # 2. Check /object_info as supplement/fallback
+        loader_mapping = {
+            "CheckpointLoaderSimple": ("ckpt_name", "checkpoints"),
+            "UnetLoaderGGUF": ("unet_name", "diffusion_models"),
+            "UNETLoader": ("unet_name", "diffusion_models"),
+            "CLIPLoader": ("clip_name", "text_encoders"),
+            "CLIPLoaderGGUF": ("clip_name", "text_encoders"),
+            "DualCLIPLoaderGGUF": ("clip_name1", "text_encoders"),
+            "VAELoader": ("vae_name", "vae"),
+            "UpscaleModelLoader": ("model_name", "upscale_models"),
+            "LoraLoader": ("lora_name", "loras"),
+            "ControlNetLoader": ("control_net_name", "controlnet")
+        }
+
+        try:
+            obj_res = requests.get(f"{self.base_url}/object_info", timeout=5)
+            if obj_res.status_code == 200:
+                obj_data = obj_res.json()
+                for node_name, (input_field, cat) in loader_mapping.items():
+                    if node_name in obj_data:
+                        inputs = obj_data[node_name].get("input", {}).get("required", {})
+                        field_val = inputs.get(input_field, [])
+                        files = []
+                        if isinstance(field_val, list) and len(field_val) > 0:
+                            if isinstance(field_val[0], list):
+                                files = field_val[0]
+                            elif isinstance(field_val[0], str) and field_val[0] == "COMBO" and len(field_val) > 1 and isinstance(field_val[1], dict):
+                                files = field_val[1].get("options", [])
+                        for f in files:
+                            if isinstance(f, str) and not f.endswith((".lock", ".metadata", ".gitignore", ".log")):
+                                if f != "pixel_space":
+                                    categories[cat].append(f)
+        except Exception as e:
+            logger.warning(f"Error querying /object_info: {e}")
+
+        # Deduplicate while preserving order
+        for cat in categories:
+            categories[cat] = list(dict.fromkeys(categories[cat]))
+
+        return categories
+
+    def get_all_known_models(self) -> list:
+        """Get a flat list of all model filenames across all categories."""
+        all_models = []
+        for file_list in self.categorized_models.values():
+            all_models.extend(file_list)
+        return list(dict.fromkeys(all_models))
+
+    def _get_available_models(self):
+        """Fetch list of available models from ComfyUI (diffusion, checkpoints, etc.)."""
+        self.categorized_models = self.get_categorized_models()
+        # Primary models for generation are diffusion_models + checkpoints
+        models = self.categorized_models.get("diffusion_models", []) + self.categorized_models.get("checkpoints", [])
+        if not models:
+            models = self.get_all_known_models()
+        logger.info(f"Available primary models: {models}")
+        return models
+
+    def free_vram(self, unload_models: bool = True, free_memory: bool = True) -> dict:
+        """Call ComfyUI /free endpoint to unload models and free GPU memory."""
+        try:
+            res = requests.post(
+                f"{self.base_url}/free",
+                json={"unload_models": unload_models, "free_memory": free_memory},
+                timeout=10
+            )
+            return {
+                "success": res.status_code == 200,
+                "message": "Models unloaded and GPU VRAM freed successfully." if res.status_code == 200 else f"Failed to free VRAM: {res.text}",
+                "status_code": res.status_code
+            }
+        except Exception as e:
+            logger.error(f"Failed to free VRAM: {e}")
+            return {"success": False, "error": str(e)}
+
+    def run_custom_workflow(self, workflow: Dict[str, Any], preferred_output_keys: Sequence[str] | None = None, max_attempts: int | None = None):
+        if max_attempts is None:
+            max_attempts = int(os.getenv("COMFY_MAX_WAIT_SECONDS", "300"))
         if preferred_output_keys is None:
             preferred_output_keys = ("images", "image", "gifs", "gif", "audio", "audios", "files")
 
@@ -264,7 +351,9 @@ class ComfyUIClient:
 
         return "; ".join(parts)
 
-    def _wait_for_prompt(self, prompt_id: str, max_attempts: int = 30):
+    def _wait_for_prompt(self, prompt_id: str, max_attempts: int | None = None):
+        if max_attempts is None:
+            max_attempts = int(os.getenv("COMFY_MAX_WAIT_SECONDS", "300"))
         for attempt in range(max_attempts):
             try:
                 # Try both the specific prompt_id endpoint and the full history endpoint
@@ -440,7 +529,8 @@ class ComfyUIClient:
                     output_type = asset.get("type", "output")
                     
                     # URL encode for special characters
-                    base_url = self.base_url.rstrip('/')
+                    external_url = os.getenv("COMFY_EXTERNAL_URL")
+                    base_url = external_url.rstrip('/') if external_url else self.base_url.rstrip('/')
                     encoded_filename = quote(filename, safe='')
                     encoded_subfolder = quote(subfolder, safe='') if subfolder else ''
                     

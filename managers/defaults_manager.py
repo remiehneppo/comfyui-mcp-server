@@ -30,16 +30,22 @@ class DefaultsManager:
         self._available_models_set: set[str] = set()
         self._invalid_models: Dict[str, str] = {}  # Maps namespace -> model name for invalid defaults
         self._default_sources: Dict[str, Dict[str, str]] = {}  # Tracks source per namespace/key
+        self.refresh_model_set()
+
+        default_img_model = "v1-5-pruned-emaonly.ckpt"
+        if default_img_model not in self._available_models_set and self.comfyui_client.available_models:
+            default_img_model = self.comfyui_client.available_models[0]
+
         self._hardcoded_defaults = {
             "image": {
-                "width": 512,
-                "height": 512,
+                "width": 1024 if "flux" in default_img_model.lower() else 512,
+                "height": 1024 if "flux" in default_img_model.lower() else 512,
                 "steps": 20,
-                "cfg": 8.0,
+                "cfg": 3.5 if "flux" in default_img_model.lower() else 8.0,
                 "sampler_name": "euler",
-                "scheduler": "normal",
+                "scheduler": "simple" if "flux" in default_img_model.lower() else "normal",
                 "denoise": 1.0,
-                "model": "v1-5-pruned-emaonly.ckpt",
+                "model": default_img_model,
                 "negative_prompt": "text, watermark",
             },
             "audio": {
@@ -175,10 +181,12 @@ class DefaultsManager:
     
     def refresh_model_set(self) -> None:
         """Refresh the cached set of available models from ComfyUI client."""
-        if self.comfyui_client.available_models:
-            self._available_models_set = set(self.comfyui_client.available_models)
-        else:
-            self._available_models_set = set()
+        all_models = []
+        if hasattr(self.comfyui_client, "get_all_known_models"):
+            all_models = self.comfyui_client.get_all_known_models()
+        if not all_models and self.comfyui_client.available_models:
+            all_models = self.comfyui_client.available_models
+        self._available_models_set = set(all_models)
     
     def _get_default_source(self, namespace: str, key: str) -> str:
         """Determine where a default value came from (runtime/config/env/hardcoded)."""

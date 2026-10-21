@@ -174,14 +174,17 @@ No migration is required unless you want the new capabilities.
 
 ### Configuration Tools
 
-- **`list_models`**: List available ComfyUI models
+- **`list_models`**: List all available ComfyUI models categorized by model type (diffusion/UNet, GGUF, text encoders, VAE, upscalers, checkpoints, LoRAs, ControlNet).
 - **`get_defaults`**: Get current default values
 - **`set_defaults`**: Set default values (with optional persistence)
+- **`free_vram`**: Unload models and free GPU memory (VRAM) in ComfyUI (useful when switching between image generation and local LLMs)
 
 ### Workflow Tools
 
-- **`list_workflows`**: List all available workflows
-- **`run_workflow`**: Run any workflow with custom parameters
+- **`list_workflows`**: List all available workflows in the `workflows/` directory
+- **`run_workflow`**: Run a saved workflow with custom parameter overrides
+- **`execute_custom_workflow`**: Run any custom ComfyUI workflow JSON graph directly (supports both ComfyUI API prompt format and LiteGraph UI format with auto-conversion)
+- **`upscale_image`**: Upscale an image using an upscale model (e.g. `4x-UltraSharp.pth`)
 
 ### Publish Tools
 
@@ -253,7 +256,13 @@ The server supports configurable defaults to avoid repeating common parameters. 
 
 - **Runtime defaults**: Use `set_defaults` tool (ephemeral, lost on restart)
 - **Config file**: `~/.config/comfy-mcp/config.json` (persistent)
-- **Environment variables**: `COMFY_MCP_DEFAULT_*` prefixed variables
+- **Environment variables**:
+  - `COMFYUI_URL`: ComfyUI backend URL (default: `http://localhost:8188`)
+  - `COMFYUI_OUTPUT_ROOT`: Path to ComfyUI output directory (default: auto-detected)
+  - `COMFY_EXTERNAL_URL`: Public or Tailscale URL for viewing images remotely (e.g. `http://100.104.5.113:8188`)
+  - `COMFY_MAX_WAIT_SECONDS`: Maximum seconds to wait for workflow generation (default: `300`)
+  - `COMFY_MCP_HOST` / `COMFY_MCP_PORT`: Host and port for MCP server (default: `0.0.0.0:9000`)
+  - `COMFY_MCP_DEFAULT_*`: Default generation parameters
 
 Defaults are resolved in priority order: per-call values → runtime defaults → config file → environment variables → hardcoded defaults.
 

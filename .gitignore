@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 archive/
+.pytest_cache/
+*.log
+.env
+.DS_Store

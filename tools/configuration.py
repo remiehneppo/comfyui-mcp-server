@@ -14,16 +14,28 @@ def register_configuration_tools(
     
     @mcp.tool()
     def list_models() -> dict:
-        """List all available checkpoint models in ComfyUI.
+        """List all available models in ComfyUI categorized by model type.
         
-        Returns a list of model names that can be used with generation tools.
-        This helps AI agents choose appropriate models for different use cases.
+        Returns available diffusion models/UNets, text encoders/CLIP, VAE, checkpoints,
+        upscalers, LoRAs, and ControlNet. Helps AI agents choose appropriate models
+        and configure workflows.
         """
-        models = comfyui_client.available_models
+        categorized = comfyui_client.get_categorized_models() if hasattr(comfyui_client, "get_categorized_models") else {}
+        all_models = comfyui_client.available_models
+        default_model = defaults_manager.get_default("image", "model") if defaults_manager else (all_models[0] if all_models else None)
+
         return {
-            "models": models,
-            "count": len(models),
-            "default": "v1-5-pruned-emaonly.ckpt" if models else None
+            "models": all_models,
+            "count": len(all_models),
+            "default": default_model,
+            "diffusion_models": categorized.get("diffusion_models", []),
+            "text_encoders": categorized.get("text_encoders", []),
+            "vae": categorized.get("vae", []),
+            "upscale_models": categorized.get("upscale_models", []),
+            "checkpoints": categorized.get("checkpoints", []),
+            "loras": categorized.get("loras", []),
+            "controlnet": categorized.get("controlnet", []),
+            "categorized": categorized
         }
 
     @mcp.tool()
@@ -93,3 +105,14 @@ def register_configuration_tools(
             return {"success": False, "errors": errors}
         
         return {"success": True, "updated": results}
+
+    @mcp.tool()
+    def free_vram() -> dict:
+        """Unload models and free GPU memory (VRAM) in ComfyUI.
+        
+        Useful to reclaim GPU memory after generation, especially when
+        switching between ComfyUI and local LLM/inference.
+        """
+        if hasattr(comfyui_client, "free_vram"):
+            return comfyui_client.free_vram()
+        return {"success": False, "error": "free_vram not supported on client"}
