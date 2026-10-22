@@ -144,3 +144,68 @@ def register_asset_tools(
         except Exception as e:
             logger.exception(f"Failed to process asset {asset_id} for viewing")
             return {"error": f"Failed to process asset: {str(e)}"}
+
+    @mcp.tool()
+    def read_image_metadata(filename: str, subfolder: str = "", folder_type: str = "output") -> dict:
+        """Read embedded workflow and generation metadata (prompt, seed, model) from a generated image.
+        
+        Args:
+            filename: Name of the image file (e.g. 'AGENT_MARKETING_WATCH_00001_.png')
+            subfolder: Subfolder in output directory (optional)
+            folder_type: Folder type (default: 'output')
+            
+        Returns:
+            Dictionary containing prompt graph, extra pnginfo, format, and image dimensions.
+        """
+        import os
+        import json
+        from PIL import Image
+
+        # Try to locate the file in output directory
+        output_root = os.getenv("COMFYUI_OUTPUT_ROOT", "/home/tieubaoca/AI/ComfyUI/output")
+        file_path = os.path.join(output_root, subfolder, filename) if subfolder else os.path.join(output_root, filename)
+
+        if not os.path.exists(file_path):
+            # Try fetching bytes from ComfyUI API /view
+            try:
+                base_url = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
+                view_url = f"{base_url}/view?filename={filename}&type={folder_type}"
+                if subfolder:
+                    view_url += f"&subfolder={subfolder}"
+                img_bytes = fetch_asset_bytes(view_url)
+                import io
+                img = Image.open(io.BytesIO(img_bytes))
+            except Exception as e:
+                return {"error": f"File '{filename}' not found locally at {file_path} and could not fetch via API: {e}"}
+        else:
+            try:
+                img = Image.open(file_path)
+            except Exception as e:
+                return {"error": f"Failed to open image {file_path}: {e}"}
+
+        info = dict(img.info) if hasattr(img, "info") else {}
+        parsed_prompt = None
+        parsed_workflow = None
+
+        if "prompt" in info:
+            try:
+                parsed_prompt = json.loads(info["prompt"]) if isinstance(info["prompt"], str) else info["prompt"]
+            except Exception:
+                parsed_prompt = info["prompt"]
+
+        if "workflow" in info:
+            try:
+                parsed_workflow = json.loads(info["workflow"]) if isinstance(info["workflow"], str) else info["workflow"]
+            except Exception:
+                parsed_workflow = info["workflow"]
+
+        return {
+            "filename": filename,
+            "width": img.width,
+            "height": img.height,
+            "format": img.format,
+            "has_metadata": bool(parsed_prompt or parsed_workflow),
+            "prompt": parsed_prompt,
+            "workflow": parsed_workflow,
+            "extra_info_keys": list(info.keys())
+        }

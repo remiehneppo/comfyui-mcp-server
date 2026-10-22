@@ -45,23 +45,24 @@ def register_job_tools(
             return {"error": str(e)}
     
     @mcp.tool()
-    def get_job(prompt_id: str) -> dict:
-        """Get job status and history for a specific prompt ID.
+    def get_job(prompt_id: str, return_inline_preview: bool = False) -> dict:
+        """Get job status and history for a specific prompt ID, with optional inline preview.
         
         Polls ComfyUI's /history/{prompt_id} endpoint to check if a job
-        has completed and retrieve its outputs. This is the primary
-        way to check job completion status.
+        has completed and retrieve its outputs. If completed and return_inline_preview=True,
+        generates an inline preview thumbnail.
         
         Args:
             prompt_id: The prompt ID returned from workflow submission
+            return_inline_preview: If True and job is completed, include a thumbnail base64
         
         Returns:
             Dict with:
             - status: "completed", "running", "queued", "processing", "error", or "not_found"
             - prompt_id: The prompt ID
-            - outputs: Output data if completed (same format as generation tools)
+            - outputs: Output data if completed
+            - inline_preview_base64: Base64 thumbnail if completed and requested
             - error: Error information if the job failed
-            - history: Full ComfyUI history snapshot for this prompt
             - message: Human-readable status message
         """
         if not prompt_id or not prompt_id.strip():
@@ -125,13 +126,29 @@ def register_job_tools(
                     
                     # Check if completed with outputs
                     if "outputs" in prompt_data and prompt_data["outputs"]:
-                        return {
+                        outputs = prompt_data["outputs"]
+                        response_dict = {
                             "status": "completed",
                             "prompt_id": prompt_id,
-                            "outputs": prompt_data["outputs"],
+                            "outputs": outputs,
                             "history": prompt_data,
                             "message": "Job completed successfully"
                         }
+
+                        # Generate inline preview if requested
+                        if return_inline_preview:
+                            try:
+                                from asset_processor import encode_preview_for_mcp, fetch_asset_bytes
+                                asset_info = comfyui_client._extract_first_asset_info(outputs, ("images", "image", "gifs", "gif", "files"))
+                                image_url = asset_info.get("asset_url")
+                                if image_url:
+                                    img_bytes = fetch_asset_bytes(image_url)
+                                    preview_res = encode_preview_for_mcp(img_bytes, max_dim=256, max_b64_chars=100000, quality=70)
+                                    response_dict["inline_preview_base64"] = f"data:{preview_res.mime_type};base64,{preview_res.b64}"
+                            except Exception as prev_err:
+                                logger.warning(f"Failed to generate inline preview for job {prompt_id}: {prev_err}")
+
+                        return response_dict
                     else:
                         # History exists but no outputs yet (might be in transition)
                         return {
