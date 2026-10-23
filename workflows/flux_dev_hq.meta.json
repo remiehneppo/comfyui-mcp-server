@@ -1,0 +1,15 @@
+{
+  "name": "FLUX.1 Dev High Quality (Q8 GGUF)",
+  "description": "State-of-the-art text-to-image generation using FLUX.1 [dev] Q8 GGUF with Dual CLIP (T5-XXL + CLIP-L). Exceptional prompt following and detail rendering. Prompts must always be in English.",
+  "defaults": {
+    "model": "flux1-dev-Q8_0.gguf",
+    "width": 1024,
+    "height": 1024,
+    "steps": 20,
+    "guidance": 3.5,
+    "sampler_name": "euler",
+    "scheduler": "simple",
+    "denoise": 1.0,
+    "negative_prompt": ""
+  }
+}

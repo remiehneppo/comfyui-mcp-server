@@ -1,0 +1,17 @@
+{
+  "name": "FLUX Design & Marketing with LoRA",
+  "description": "FLUX image generation with design LoRA integration (Logo Design, Vector Journey, 3D Live, Add Details). Exceptional for branding, graphic design, and marketing assets. Prompts must always be in English.",
+  "defaults": {
+    "model": "flux1-dev-Q8_0.gguf",
+    "lora_name": "FLUX-dev-lora-Logo-Design.safetensors",
+    "lora_strength": 0.85,
+    "width": 1024,
+    "height": 1024,
+    "steps": 20,
+    "guidance": 3.5,
+    "sampler_name": "euler",
+    "scheduler": "simple",
+    "denoise": 1.0,
+    "negative_prompt": ""
+  }
+}

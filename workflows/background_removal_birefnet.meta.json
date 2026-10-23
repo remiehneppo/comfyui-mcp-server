@@ -1,0 +1,7 @@
+{
+  "name": "Background Removal (BiRefNet)",
+  "description": "State-of-the-art background removal and alpha cutout using BiRefNet. Exports clean, transparent PNG with fine edge fidelity (hair, glass, complex contours) in ~1-2 seconds.",
+  "defaults": {
+    "bg_removal_name": "birefnet.safetensors"
+  }
+}

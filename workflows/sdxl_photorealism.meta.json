@@ -1,0 +1,15 @@
+{
+  "name": "SDXL Photorealism (Juggernaut XL v9)",
+  "description": "High-fidelity photorealistic generation using Juggernaut XL v9 with DPM++ 2M Karras. Prompts must always be in English.",
+  "defaults": {
+    "model": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors",
+    "width": 1024,
+    "height": 1024,
+    "steps": 25,
+    "cfg": 6.5,
+    "sampler_name": "dpmpp_2m",
+    "scheduler": "karras",
+    "denoise": 1.0,
+    "negative_prompt": "ugly, deformed, noisy, blurry, distorted, low quality, bad anatomy, bad hands, missing fingers, extra limbs, watermark, text"
+  }
+}

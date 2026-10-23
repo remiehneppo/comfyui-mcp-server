@@ -1,0 +1,7 @@
+{
+  "name": "Super-Resolution 4x (4x-UltraSharp)",
+  "description": "4x AI super-resolution using 4x-UltraSharp. Restores fine textures, crisp edges, and removes compression artifacts without blurring.",
+  "defaults": {
+    "model": "4x-UltraSharp.pth"
+  }
+}

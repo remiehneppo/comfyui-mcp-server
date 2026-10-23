@@ -39,6 +39,11 @@ PLACEHOLDER_DESCRIPTIONS = {
     "lyrics_strength": "How strongly lyrics influence audio generation (0.0-1.0). Default: 0.99.",
     "duration": "Video duration in seconds. Default: 5.",
     "fps": "Frames per second for video output. Default: 16.",
+    "guidance": "Flux guidance scale (default: 3.5). Controls prompt adherence.",
+    "lora_name": "Name of the LoRA model (e.g. 'FLUX-dev-lora-Logo-Design.safetensors').",
+    "lora_strength": "Strength/weight of the LoRA model (0.0 to 2.0, default: 0.8).",
+    "image": "Input image filename in ComfyUI input folder.",
+    "bg_removal_name": "Background removal model name (e.g. 'birefnet.safetensors').",
 }
 DEFAULT_OUTPUT_KEYS = ("images", "image", "gifs", "gif")
 AUDIO_OUTPUT_KEYS = ("audio", "audios", "sound", "files")
@@ -108,7 +113,7 @@ class WorkflowManager:
             metadata = self._load_workflow_metadata(workflow_path)
             
             # Extract parameters
-            parameters = self._extract_parameters(workflow)
+            parameters = self._extract_parameters(workflow, metadata)
             available_inputs = {
                 name: {
                     "type": param.annotation.__name__,
@@ -191,7 +196,7 @@ class WorkflowManager:
 
         # If no metadata, try to infer from PARAM_ placeholders
         if not override_mappings:
-            parameters = self._extract_parameters(workflow)
+            parameters = self._extract_parameters(workflow, metadata)
             for param_name, param in parameters.items():
                 if param_name not in override_mappings:
                     override_mappings[param_name] = param.bindings
@@ -204,7 +209,7 @@ class WorkflowManager:
         overrides_dropped = {}
 
         # Extract parameters once for type coercion
-        parameters = self._extract_parameters(workflow)
+        parameters = self._extract_parameters(workflow, metadata)
 
         # Apply overrides with constraints
         for param_name, value in overrides.items():
@@ -237,14 +242,21 @@ class WorkflowManager:
             overrides_applied[param_name] = value
 
         # Apply defaults for parameters not in overrides
+        workflow_defaults = metadata.get("defaults", {})
         for param_name, param in parameters.items():
             if param_name not in overrides and not param.required:
-                if defaults_manager:
+                default_value = None
+                if param.name == "seed" and param.annotation is int:
+                    default_value = random.randint(0, 2**32 - 1)
+                elif param.name in workflow_defaults:
+                    default_value = workflow_defaults[param.name]
+                elif defaults_manager:
                     default_value = defaults_manager.get_default(namespace, param.name, None)
-                    if default_value is not None:
-                        for node_id, input_name in param.bindings:
-                            if node_id in workflow and "inputs" in workflow[node_id]:
-                                workflow[node_id]["inputs"][input_name] = default_value
+                if default_value is not None:
+                    coerced_default = self._coerce_value(default_value, param.annotation)
+                    for node_id, input_name in param.bindings:
+                        if node_id in workflow and "inputs" in workflow[node_id]:
+                            workflow[node_id]["inputs"][input_name] = coerced_default
 
         # Store the report on the workflow dict so callers can access it
         # (using a private key that won't conflict with node IDs which are numeric strings)
@@ -274,8 +286,9 @@ class WorkflowManager:
         try:
             with open(workflow_path, "r", encoding="utf-8") as f:
                 workflow = json.load(f)
+            metadata = self._load_workflow_metadata(workflow_path)
             definition.template = workflow
-            definition.parameters = self._extract_parameters(workflow)
+            definition.parameters = self._extract_parameters(workflow, metadata)
             definition.output_preferences = self._guess_output_preferences(workflow)
             self._workflow_cache[definition.workflow_id] = workflow
             self._workflow_mtime[definition.workflow_id] = current_mtime
@@ -289,6 +302,10 @@ class WorkflowManager:
             return definitions
 
         for workflow_path in sorted(self.workflows_dir.glob("*.json")):
+            # Skip sidecar metadata files
+            if workflow_path.name.endswith(".meta.json"):
+                continue
+
             try:
                 with open(workflow_path, "r", encoding="utf-8") as handle:
                     workflow = json.load(handle)
@@ -296,7 +313,8 @@ class WorkflowManager:
                 logger.error("Skipping workflow %s due to JSON error: %s", workflow_path.name, exc)
                 continue
 
-            parameters = self._extract_parameters(workflow)
+            metadata = self._load_workflow_metadata(workflow_path)
+            parameters = self._extract_parameters(workflow, metadata)
             if not parameters:
                 logger.info(
                     "Workflow %s has no %s placeholders; skipping auto-tool registration",
@@ -306,10 +324,11 @@ class WorkflowManager:
                 continue
 
             tool_name = self._dedupe_tool_name(self._derive_tool_name(workflow_path.stem))
+            tool_desc = metadata.get("description") or self._derive_description(workflow_path.stem)
             definition = WorkflowToolDefinition(
                 workflow_id=workflow_path.stem,
                 tool_name=tool_name,
-                description=self._derive_description(workflow_path.stem),
+                description=tool_desc,
                 template=workflow,
                 parameters=parameters,
                 output_preferences=self._guess_output_preferences(workflow),
@@ -339,6 +358,10 @@ class WorkflowManager:
         
         # Determine namespace (image, audio, or video)
         namespace = self._determine_namespace(definition.workflow_id)
+
+        workflow_path = self._safe_workflow_path(definition.workflow_id)
+        metadata = self._load_workflow_metadata(workflow_path) if workflow_path else {}
+        workflow_defaults = metadata.get("defaults", {})
         
         for param in definition.parameters.values():
             if param.required and param.name not in provided_params:
@@ -351,6 +374,9 @@ class WorkflowManager:
                     # Special handling for seed - generate random
                     raw_value = random.randint(0, 2**32 - 1)
                     logger.debug(f"Generated random seed: {raw_value}")
+                elif param.name in workflow_defaults:
+                    raw_value = workflow_defaults[param.name]
+                    logger.debug(f"Using workflow metadata default for {param.name}: {raw_value}")
                 elif defaults_manager:
                     # Use defaults manager to get value with proper precedence
                     raw_value = defaults_manager.get_default(namespace, param.name, None)
@@ -369,8 +395,9 @@ class WorkflowManager:
         
         return workflow
 
-    def _extract_parameters(self, workflow: Dict[str, Any]):
+    def _extract_parameters(self, workflow: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None):
         parameters: "OrderedDict[str, WorkflowParameter]" = OrderedDict()
+        metadata_defaults = metadata.get("defaults", {}) if metadata else {}
         for node_id, node in workflow.items():
             inputs = node.get("inputs", {})
             if not isinstance(inputs, dict):
@@ -386,16 +413,14 @@ class WorkflowManager:
                 parameter = parameters.get(param_name)
                 if not parameter:
                     # Make seed and other optional parameters non-required
-                    # Only 'prompt' should be required for generate_image
-                    # Only 'tags' and 'lyrics' should be required for generate_song
-                    # Only 'prompt' should be required for generate_video
                     optional_params = {
                         "seed", "width", "height", "model", "steps", "cfg",
                         "sampler_name", "scheduler", "denoise", "negative_prompt",
                         "seconds", "lyrics_strength",  # Audio-specific optional params
-                        "duration", "fps"  # Video-specific optional params
+                        "duration", "fps",  # Video-specific optional params
+                        "guidance", "lora_name", "lora_strength", "bg_removal_name",
                     }
-                    is_required = param_name not in optional_params
+                    is_required = (param_name not in optional_params) and (param_name not in metadata_defaults)
                     parameter = WorkflowParameter(
                         name=param_name,
                         placeholder=placeholder_value,

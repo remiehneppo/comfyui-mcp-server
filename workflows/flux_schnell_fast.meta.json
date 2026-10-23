@@ -1,0 +1,15 @@
+{
+  "name": "FLUX.1 Schnell Fast (4-Step Q8 GGUF)",
+  "description": "Ultra-fast generation using FLUX.1 [schnell] 4-step distilled model (~15-18s on AMD MI50). Ideal for rapid iteration, drafts, and real-time generation. Prompts must always be in English.",
+  "defaults": {
+    "model": "flux1-schnell-Q8_0.gguf",
+    "width": 1024,
+    "height": 1024,
+    "steps": 4,
+    "guidance": 3.5,
+    "sampler_name": "euler",
+    "scheduler": "simple",
+    "denoise": 1.0,
+    "negative_prompt": ""
+  }
+}
