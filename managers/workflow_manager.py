@@ -22,7 +22,7 @@ PLACEHOLDER_TYPE_HINTS = {
     "BOOL": bool,
 }
 PLACEHOLDER_DESCRIPTIONS = {
-    "prompt": "Main text prompt used inside the workflow.",
+    "prompt": "Main text prompt used inside the workflow. REQUIRED: Must always be in English. If the user provided a prompt in another language (e.g. Vietnamese), translate and enrich it into descriptive English first for optimal model adherence.",
     "seed": "Random seed for image generation. If not provided, a random seed will be generated.",
     "width": "Image width in pixels. Default: 512.",
     "height": "Image height in pixels. Default: 512.",
@@ -32,7 +32,7 @@ PLACEHOLDER_DESCRIPTIONS = {
     "sampler_name": "Sampling method (e.g., 'euler', 'dpmpp_2m', 'ddim'). Default: 'euler'.",
     "scheduler": "Scheduler type (e.g., 'normal', 'karras', 'exponential'). Default: 'normal'.",
     "denoise": "Denoising strength (0.0-1.0). Default: 1.0.",
-    "negative_prompt": "Negative prompt to avoid certain elements. Default: 'text, watermark'.",
+    "negative_prompt": "Negative prompt to avoid certain elements in English. Default: 'text, watermark'.",
     "tags": "Comma-separated descriptive tags for the audio model.",
     "lyrics": "Full lyric text that should drive the audio generation.",
     "seconds": "Audio duration in seconds. Default: 60 (1 minute).",
@@ -447,7 +447,10 @@ class WorkflowManager:
     def _derive_description(self, stem: str):
         readable = stem.replace("_", " ").replace("-", " ").strip()
         readable = readable if readable else stem
-        return f"Execute the '{readable}' ComfyUI workflow."
+        desc = f"Execute the '{readable}' ComfyUI workflow."
+        if "image" in stem.lower() or "video" in stem.lower():
+            desc += " Prompts must always be provided in English (translate non-English inputs to English first)."
+        return desc
 
     def _determine_namespace(self, workflow_id: str) -> str:
         """Determine namespace based on workflow ID."""

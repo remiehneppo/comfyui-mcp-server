@@ -154,9 +154,12 @@ No migration is required unless you want the new capabilities.
 
 ## Available Tools
 
+> **Important Prompt Guideline:**
+> Diffusion models (FLUX, SDXL, SD 1.5) and their text encoders (T5-XXL, CLIP-L, OpenCLIP) are trained almost exclusively on English datasets. Agents **MUST always translate non-English prompts (e.g. Vietnamese, Chinese) into descriptive English** before invoking `generate_image`, `run_workflow`, or passing them to `CLIPTextEncode` in `execute_custom_workflow`.
+
 ### Generation Tools
 
-- **`generate_image`**: Generate images (requires `prompt`)
+- **`generate_image`**: Generate images (requires `prompt` in English)
 - **`generate_song`**: Generate audio (requires `tags` and `lyrics`)
 - **`regenerate`**: Regenerate an existing asset with optional parameter overrides (requires `asset_id`)
 

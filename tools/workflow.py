@@ -88,7 +88,8 @@ def register_workflow_tools(
         
         Args:
             workflow_id: The workflow ID (filename stem, e.g., "generate_image")
-            overrides: Optional dict of parameter overrides (e.g., {"prompt": "a cat", "width": 1024})
+            overrides: Optional dict of parameter overrides (e.g., {"prompt": "a cat", "width": 1024}).
+                       NOTE: All prompts and text inputs must be in English.
             options: Optional dict of execution options (reserved for future use)
             return_inline_preview: If True, include a small thumbnail base64 in response (256px, ~100KB)
         
@@ -152,6 +153,8 @@ def register_workflow_tools(
         Args:
             workflow: ComfyUI workflow prompt graph as a dictionary or JSON string.
                       Format: {"node_id": {"class_type": "...", "inputs": {...}}}
+                      IMPORTANT: Text prompts inside CLIPTextEncode nodes MUST always be in English.
+                      Translate any non-English prompt from the user to descriptive English before calling.
             return_inline_preview: If True, include a small thumbnail base64 in response
             
         Returns:
