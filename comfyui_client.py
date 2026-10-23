@@ -30,7 +30,8 @@ class ComfyUIClient:
             "vae": [],
             "upscale_models": [],
             "loras": [],
-            "controlnet": []
+            "controlnet": [],
+            "background_removal": []
         }
 
         # 1. Try ComfyUI /models endpoint
@@ -48,7 +49,8 @@ class ComfyUIClient:
                     "vae": "vae",
                     "upscale_models": "upscale_models",
                     "loras": "loras",
-                    "controlnet": "controlnet"
+                    "controlnet": "controlnet",
+                    "background_removal": "background_removal"
                 }
                 for folder_name, cat in mapping.items():
                     if folder_name in folders:
@@ -76,7 +78,8 @@ class ComfyUIClient:
             "VAELoader": ("vae_name", "vae"),
             "UpscaleModelLoader": ("model_name", "upscale_models"),
             "LoraLoader": ("lora_name", "loras"),
-            "ControlNetLoader": ("control_net_name", "controlnet")
+            "ControlNetLoader": ("control_net_name", "controlnet"),
+            "LoadBackgroundRemovalModel": ("bg_removal_name", "background_removal")
         }
 
         try:
